@@ -7,7 +7,7 @@ import seaborn as sns
 
 # ── Konfigurasi halaman ──────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Klasifikasi Kualitas Udara DKI Jakarta",
+    page_title="Klasifikasi Kualitas udara DKI Jakarta",
     page_icon="🌫️",
     layout="wide"
 )
