@@ -93,17 +93,14 @@ with st.sidebar:
         st.caption(f"  • {k}: {v} µg/m³")
 
 # ── Header ────────────────────────────────────────────────────────────────────
-st.title("🌫️ Sistem Klasifikasi Kualitas Udara DKI Jakarta")
+st.title("Sistem Klasifikasi Kualitas Udara DKI Jakarta")
 st.markdown(
     "Berbasis **Algoritma K-Nearest Neighbors (k-NN)** · "
     "Dataset ISPU DKI Jakarta 2023"
 )
 st.divider()
 
-# ════════════════════════════════════════════════════════════════════════════════
-# LANGKAH 1 – Pilih Lokasi
-# ════════════════════════════════════════════════════════════════════════════════
-st.subheader("📍 Langkah 1 — Pilih Lokasi")
+st.subheader("Pilih Lokasi")
 
 col_loc, col_tgl = st.columns([2, 1])
 with col_loc:
@@ -133,10 +130,7 @@ st.success(
 )
 st.divider()
 
-# ════════════════════════════════════════════════════════════════════════════════
-# LANGKAH 2 – Input Data ISPU
-# ════════════════════════════════════════════════════════════════════════════════
-st.subheader(f"📋 Langkah 2 — Input Data ISPU Terbaru · {pilihan}")
+st.subheader(f"Input Data ISPU Terbaru · {pilihan}")
 st.caption(
     "Masukkan nilai komponen udara dari hasil pengukuran terkini di lokasi ini. "
     "Gunakan angka dari laporan stasiun ISPU atau sensor lokal."
@@ -156,12 +150,9 @@ analisis_btn = st.button(
     use_container_width=True,
 )
 
-# ════════════════════════════════════════════════════════════════════════════════
-# LANGKAH 3 – Hasil Analisis
-# ════════════════════════════════════════════════════════════════════════════════
 if analisis_btn:
     st.divider()
-    st.subheader(f"📊 Langkah 3 — Hasil Analisis Kualitas Udara: {pilihan}")
+    st.subheader(f"Hasil Analisis Kualitas Udara: {pilihan}")
 
     # Prediksi
     input_arr    = np.array([[pm10, pm25, so2, co, o3, no2]])
