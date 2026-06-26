@@ -191,7 +191,6 @@ Udara di kawasan **{pilihan}** saat ini tidak membahayakan kesehatan
 masyarakat, dan aktivitas luar ruangan dapat dilakukan seperti biasa.
                 """
             )
-            st.balloons()
 
         else:
             st.error(f"## ⚠️ {pilihan}: Kualitas Udara TIDAK SEHAT")
