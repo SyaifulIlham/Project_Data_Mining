@@ -91,17 +91,21 @@ FITUR_DISPLAY = {
 
 # Ambang batas aman ISPU (µg/m³)
 AMBANG = {
-    "PM10": 150, "PM25": 65, "SO2": 75, "CO": 30, "O3": 100, "NO2": 200,
+    "PM10": 150,   
+    "PM25": 55,     
+    "SO2":  180,    
+    "CO":   8000,   
+    "O3":   235,    
+    "NO2":  200,    
 }
 
-# Profil historis tipikal per stasiun (µg/m³) — rata-rata ISPU DKI 2023
-# Untuk produksi: ganti generate_ispu() dengan pemanggilan API real-time
+
 PROFIL_STASIUN = {
-    "DKI1": {"PM10": 66, "PM25": 47, "SO2": 31, "CO": 14, "O3": 28, "NO2": 44},
-    "DKI2": {"PM10": 73, "PM25": 55, "SO2": 29, "CO": 17, "O3": 32, "NO2": 49},
-    "DKI3": {"PM10": 51, "PM25": 37, "SO2": 22, "CO": 10, "O3": 23, "NO2": 28},
-    "DKI4": {"PM10": 86, "PM25": 66, "SO2": 36, "CO": 22, "O3": 35, "NO2": 56},
-    "DKI5": {"PM10": 79, "PM25": 58, "SO2": 32, "CO": 19, "O3": 31, "NO2": 48},
+    "DKI1": {"PM10": 55, "PM25": 40, "SO2": 25, "CO": 12, "O3": 24, "NO2": 35},
+    "DKI2": {"PM10": 60, "PM25": 45, "SO2": 24, "CO": 14, "O3": 27, "NO2": 38},
+    "DKI3": {"PM10": 45, "PM25": 32, "SO2": 18, "CO":  9, "O3": 20, "NO2": 22},
+    "DKI4": {"PM10": 65, "PM25": 50, "SO2": 28, "CO": 16, "O3": 28, "NO2": 55},  
+    "DKI5": {"PM10": 62, "PM25": 46, "SO2": 26, "CO": 15, "O3": 26, "NO2": 37},
 }
 
 # ── Helper ────────────────────────────────────────────────────────────────────
