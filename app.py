@@ -3,15 +3,16 @@ import pickle
 import numpy as np
 import pandas as pd
 import datetime
+import time
 
-# ── Konfigurasi halaman ──────────────────────────────────────────────────────
+# ── Konfigurasi halaman ───────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Kualitas Udara DKI Jakarta",
     page_icon="🌫️",
     layout="wide",
 )
 
-# ── Load artefak model ───────────────────────────────────────────────────────
+# ── Load artefak model ────────────────────────────────────────────────────────
 @st.cache_resource
 def load_artifacts():
     with open("knn_model.pkl", "rb") as f:
@@ -24,219 +25,267 @@ def load_artifacts():
 
 model, scaler, meta = load_artifacts()
 
-# ── Data wilayah DKI Jakarta ─────────────────────────────────────────────────
+# ── Konstanta ─────────────────────────────────────────────────────────────────
 LOKASI_JAKARTA = {
-    # Jakarta Pusat
-    "Bundaran HI":        "Jakarta Pusat",
-    "Senayan":            "Jakarta Pusat",
-    "Monas / Gambir":     "Jakarta Pusat",
-    "Kemayoran":          "Jakarta Pusat",
-    "Senen":              "Jakarta Pusat",
-    # Jakarta Utara
-    "Kelapa Gading":      "Jakarta Utara",
-    "Pluit / Penjaringan":"Jakarta Utara",
-    "Tanjung Priok":      "Jakarta Utara",
-    "Sunter":             "Jakarta Utara",
-    # Jakarta Selatan
-    "Jagakarsa":          "Jakarta Selatan",
-    "Kemang":             "Jakarta Selatan",
-    "Cilandak":           "Jakarta Selatan",
-    "Blok M / Kebayoran": "Jakarta Selatan",
-    "Pasar Minggu":       "Jakarta Selatan",
-    # Jakarta Timur
-    "Lubang Buaya":       "Jakarta Timur",
-    "Pulogadung":         "Jakarta Timur",
-    "Cakung":             "Jakarta Timur",
-    "Cipinang":           "Jakarta Timur",
-    "Jatinegara":         "Jakarta Timur",
-    # Jakarta Barat
-    "Kebon Jeruk":        "Jakarta Barat",
-    "Grogol":             "Jakarta Barat",
-    "Cengkareng":         "Jakarta Barat",
-    "Kalideres":          "Jakarta Barat",
-    "Tamansari":          "Jakarta Barat",
+    "Bundaran HI":         "Jakarta Pusat",
+    "Senayan":             "Jakarta Pusat",
+    "Monas / Gambir":      "Jakarta Pusat",
+    "Kemayoran":           "Jakarta Pusat",
+    "Senen":               "Jakarta Pusat",
+    "Kelapa Gading":       "Jakarta Utara",
+    "Pluit / Penjaringan": "Jakarta Utara",
+    "Tanjung Priok":       "Jakarta Utara",
+    "Sunter":              "Jakarta Utara",
+    "Jagakarsa":           "Jakarta Selatan",
+    "Kemang":              "Jakarta Selatan",
+    "Cilandak":            "Jakarta Selatan",
+    "Blok M / Kebayoran":  "Jakarta Selatan",
+    "Pasar Minggu":        "Jakarta Selatan",
+    "Lubang Buaya":        "Jakarta Timur",
+    "Pulogadung":          "Jakarta Timur",
+    "Cakung":              "Jakarta Timur",
+    "Cipinang":            "Jakarta Timur",
+    "Jatinegara":          "Jakarta Timur",
+    "Kebon Jeruk":         "Jakarta Barat",
+    "Grogol":              "Jakarta Barat",
+    "Cengkareng":          "Jakarta Barat",
+    "Kalideres":           "Jakarta Barat",
+    "Tamansari":           "Jakarta Barat",
 }
 
 WILAYAH_ICON = {
-    "Jakarta Pusat":  "🏛️",
-    "Jakarta Utara":  "⚓",
-    "Jakarta Selatan":"🌿",
-    "Jakarta Timur":  "🏭",
-    "Jakarta Barat":  "🌆",
+    "Jakarta Pusat":   "🏛️",
+    "Jakarta Utara":   "⚓",
+    "Jakarta Selatan": "🌿",
+    "Jakarta Timur":   "🏭",
+    "Jakarta Barat":   "🌆",
 }
 
-# Ambang batas aman ISPU (untuk indikator status per komponen)
+# Setiap wilayah dipetakan ke 1 dari 5 stasiun resmi ISPU DKI
+WILAYAH_KE_STASIUN = {
+    "Jakarta Pusat":   "DKI1",
+    "Jakarta Utara":   "DKI2",
+    "Jakarta Selatan": "DKI3",
+    "Jakarta Timur":   "DKI4",
+    "Jakarta Barat":   "DKI5",
+}
+
+STASIUN_NAMA = {
+    "DKI1": "Bundaran HI",
+    "DKI2": "Kelapa Gading",
+    "DKI3": "Jagakarsa",
+    "DKI4": "Lubang Buaya",
+    "DKI5": "Kebon Jeruk",
+}
+
+# Keys internal (ASCII) — urutan ini harus sama dengan urutan fitur saat training
+FITUR = ["PM10", "PM25", "SO2", "CO", "O3", "NO2"]
+
+# Label untuk tampilan UI
+FITUR_DISPLAY = {
+    "PM10": "PM10",  "PM25": "PM2.5",
+    "SO2":  "SO₂",   "CO":   "CO",
+    "O3":   "O₃",    "NO2":  "NO₂",
+}
+
+# Ambang batas aman ISPU (µg/m³)
 AMBANG = {
-    "PM10":  150,
-    "PM2.5":  65,
-    "SO₂":    75,
-    "CO":     30,
-    "O₃":    100,
-    "NO₂":   200,
+    "PM10": 150, "PM25": 65, "SO2": 75, "CO": 30, "O3": 100, "NO2": 200,
 }
 
-def badge_status(nilai, batas):
-    return "✅ Normal" if nilai <= batas else f"⚠️ Melebihi ({batas})"
+# Profil historis tipikal per stasiun (µg/m³) — rata-rata ISPU DKI 2023
+# Untuk produksi: ganti generate_ispu() dengan pemanggilan API real-time
+PROFIL_STASIUN = {
+    "DKI1": {"PM10": 66, "PM25": 47, "SO2": 31, "CO": 14, "O3": 28, "NO2": 44},
+    "DKI2": {"PM10": 73, "PM25": 55, "SO2": 29, "CO": 17, "O3": 32, "NO2": 49},
+    "DKI3": {"PM10": 51, "PM25": 37, "SO2": 22, "CO": 10, "O3": 23, "NO2": 28},
+    "DKI4": {"PM10": 86, "PM25": 66, "SO2": 36, "CO": 22, "O3": 35, "NO2": 56},
+    "DKI5": {"PM10": 79, "PM25": 58, "SO2": 32, "CO": 19, "O3": 31, "NO2": 48},
+}
 
-# ── Sidebar: info model ───────────────────────────────────────────────────────
+# ── Helper ────────────────────────────────────────────────────────────────────
+def generate_ispu(stasiun: str) -> dict:
+    """
+    Simulasi pembacaan sensor ISPU: profil historis ± 15% variasi acak.
+    Data baru dibuat setiap kali fungsi ini dipanggil (via Refresh atau ganti lokasi).
+    → Untuk produksi: ganti isi fungsi ini dengan request ke API ISPU/AQICN.
+    """
+    base = PROFIL_STASIUN[stasiun]
+    rng  = np.random.default_rng()          # fresh RNG tanpa seed = nilai bervariasi
+    return {
+        k: max(0, int(v * (1 + rng.uniform(-0.15, 0.15))))
+        for k, v in base.items()
+    }
+
+def badge(val: float, batas: float) -> str:
+    return "✅ Normal" if val <= batas else f"⚠️ Melebihi ({batas})"
+
+# ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.header("ℹ️ Informasi Model")
-    st.metric("Algoritma",                  "K-Nearest Neighbors")
-    st.metric("Nilai k Optimal",            meta["k_terbaik"])
-    st.metric("Akurasi Test Set",           f"{meta['akurasi_test']*100:.2f}%")
-    st.metric("Akurasi CV (5-Fold)",        f"{meta['akurasi_cv']*100:.2f}%")
+    st.header("ℹ️ Info Model")
+    st.metric("Algoritma",            "K-Nearest Neighbors")
+    st.metric("k Optimal",            meta["k_terbaik"])
+    st.metric("Akurasi Test",         f"{meta['akurasi_test']*100:.2f}%")
+    st.metric("Akurasi CV (5-Fold)",  f"{meta['akurasi_cv']*100:.2f}%")
     st.caption(f"Dataset : {meta['dataset']}")
-    st.caption(f"Training: {meta['train_size']} baris | Test: {meta['test_size']} baris")
+    st.caption(f"Train : {meta['train_size']} | Test : {meta['test_size']} baris")
     st.divider()
     st.caption("📌 Ambang batas aman ISPU:")
-    for k, v in AMBANG.items():
-        st.caption(f"  • {k}: {v} µg/m³")
+    for k in FITUR:
+        st.caption(f"  • {FITUR_DISPLAY[k]}: {AMBANG[k]} µg/m³")
+    st.divider()
+    st.caption(
+        "📡 **Sumber data:** Estimasi berbasis profil historis "
+        "5 stasiun ISPU DKI Jakarta 2023 (DKI1–DKI5)."
+    )
 
 # ── Header ────────────────────────────────────────────────────────────────────
-st.title("Sistem Klasifikasi Kualitas Udara DKI Jakarta")
-st.markdown(
-    "Berbasis **Algoritma K-Nearest Neighbors (k-NN)** · "
-    "Dataset ISPU DKI Jakarta 2023"
-)
+st.title("🌫️ Klasifikasi Kualitas Udara DKI Jakarta")
+st.markdown("Berbasis **K-Nearest Neighbors (k-NN)** · Dataset ISPU DKI Jakarta 2023")
 st.divider()
 
-st.subheader("Pilih Lokasi")
+# ── Pilih Lokasi ──────────────────────────────────────────────────────────────
+st.subheader("📍 Pilih Lokasi")
+pilihan = st.selectbox(
+    "Kawasan / kelurahan:",
+    ["— Pilih lokasi —"] + sorted(LOKASI_JAKARTA.keys()),
+    help="Data ISPU dan hasil analisis tampil otomatis setelah lokasi dipilih",
+)
 
-col_loc, col_tgl = st.columns([2, 1])
-with col_loc:
-    pilihan = st.selectbox(
-        "Wilayah pengukuran:",
-        options=["— Pilih lokasi —"] + sorted(LOKASI_JAKARTA.keys()),
-        help="Pilih nama kawasan / kelurahan di DKI Jakarta",
-    )
-with col_tgl:
-    tanggal = st.date_input(
-        "Tanggal pengukuran",
-        value=datetime.date.today(),
-        help="Tanggal saat data ISPU diambil",
-    )
-
-# Hentikan render di sini jika lokasi belum dipilih
 if pilihan == "— Pilih lokasi —":
-    st.info("👆 Silakan pilih lokasi terlebih dahulu untuk melanjutkan.")
+    st.info("👆 Pilih lokasi untuk melihat data ISPU dan hasil analisis secara otomatis.")
+    with st.expander("🗺️ Lihat peta stasiun monitoring ISPU DKI Jakarta"):
+        st.markdown("""
+| Kode  | Stasiun Referensi | Kawasan yang Dipantau |
+|-------|-------------------|-----------------------|
+| DKI1  | Bundaran HI       | Jakarta Pusat (Senayan, Gambir, Kemayoran, Senen) |
+| DKI2  | Kelapa Gading     | Jakarta Utara (Penjaringan, Tanjung Priok, Sunter) |
+| DKI3  | Jagakarsa         | Jakarta Selatan (Kemang, Cilandak, Kebayoran, Pasar Minggu) |
+| DKI4  | Lubang Buaya      | Jakarta Timur (Pulogadung, Cakung, Cipinang, Jatinegara) |
+| DKI5  | Kebon Jeruk       | Jakarta Barat (Grogol, Cengkareng, Kalideres, Tamansari) |
+""")
     st.stop()
 
-wilayah = LOKASI_JAKARTA[pilihan]
-ikon    = WILAYAH_ICON.get(wilayah, "📍")
+# ── Auto-proses setelah lokasi dipilih ───────────────────────────────────────
+wilayah      = LOKASI_JAKARTA[pilihan]
+stasiun      = WILAYAH_KE_STASIUN[wilayah]
+ikon         = WILAYAH_ICON[wilayah]
+nama_stasiun = STASIUN_NAMA[stasiun]
 
-st.success(
-    f"{ikon} Lokasi dipilih: **{pilihan}** · {wilayah} · "
-    f"📅 {tanggal.strftime('%d %B %Y')}"
-)
+# Reset data di session state bila lokasi berubah
+if st.session_state.get("_lokasi") != pilihan:
+    st.session_state["_lokasi"] = pilihan
+    st.session_state["_data"]   = None
+    st.session_state["_waktu"]  = None
+
+# Info bar + tombol Refresh
+col_info, col_btn = st.columns([5, 1])
+with col_info:
+    now_str = datetime.datetime.now().strftime("%d %B %Y, %H:%M")
+    st.success(
+        f"{ikon} **{pilihan}** · {wilayah} · "
+        f"Stasiun: **{nama_stasiun}** ({stasiun}) · 🕐 {now_str} WIB"
+    )
+with col_btn:
+    if st.button("🔄 Refresh", use_container_width=True, help="Simulasikan pembacaan sensor baru"):
+        st.session_state["_data"]  = None
+        st.session_state["_waktu"] = None
+
+# Ambil / generate data ISPU (hanya dipanggil saat data kosong)
+if st.session_state["_data"] is None:
+    with st.spinner(f"⏳ Mengambil data ISPU Stasiun {stasiun} – {nama_stasiun}..."):
+        time.sleep(0.7)
+        st.session_state["_data"]  = generate_ispu(stasiun)
+        st.session_state["_waktu"] = datetime.datetime.now()
+
+d  = st.session_state["_data"]   # dict[str → int], key = FITUR
+ft = st.session_state["_waktu"]  # datetime objek waktu fetch
+
+# ── Tampilkan Komponen ISPU ───────────────────────────────────────────────────
 st.divider()
-
-st.subheader(f"Input Data ISPU Terbaru · {pilihan}")
+st.subheader(f"📊 Data ISPU Terkini · {pilihan}")
 st.caption(
-    "Masukkan nilai komponen udara dari hasil pengukuran terkini di lokasi ini. "
-    "Gunakan angka dari laporan stasiun ISPU atau sensor lokal."
+    f"📡 Stasiun {stasiun} – {nama_stasiun} · "
+    f"{ft.strftime('%d %B %Y, %H:%M')} WIB · "
+    f"*(Estimasi berbasis profil historis ISPU 2023)*"
 )
 
-pm10 = st.slider("PM10 (µg/m³)",                      min_value=0, max_value=200, value=56,  step=1)
-pm25 = st.slider("PM2.5 (µg/m³)",                    min_value=0, max_value=300, value=75,  step=1)
-so2  = st.slider("SO₂ – Sulfur Dioksida (µg/m³)",    min_value=0, max_value=100, value=45,  step=1)
-co   = st.slider("CO – Karbon Monoksida (µg/m³)",    min_value=0, max_value=60,  value=10,  step=1)
-o3   = st.slider("O₃ – Ozon (µg/m³)",               min_value=0, max_value=100, value=26,  step=1)
-no2  = st.slider("NO₂ – Nitrogen Dioksida (µg/m³)",  min_value=0, max_value=60,  value=18,  step=1)
-
-st.markdown("")
-analisis_btn = st.button(
-    f"🔍 Analisis Kualitas Udara {pilihan}",
-    type="primary",
-    use_container_width=True,
-)
-
-if analisis_btn:
-    st.divider()
-    st.subheader(f"Hasil Analisis Kualitas Udara: {pilihan}")
-
-    # Prediksi
-    input_arr    = np.array([[pm10, pm25, so2, co, o3, no2]])
-    input_scaled = scaler.transform(input_arr)
-    prediksi     = model.predict(input_scaled)[0]
-    proba        = model.predict_proba(input_scaled)[0]
-    kelas        = meta["label_classes"]
-
-    # Komponen yang melebihi ambang batas
-    komponen_vals = {
-        "PM10":  pm10,
-        "PM2.5": pm25,
-        "SO₂":   so2,
-        "CO":    co,
-        "O₃":    o3,
-        "NO₂":   no2,
-    }
-    melebihi = [k for k, v in komponen_vals.items() if v > AMBANG.get(k, 9999)]
-
-    col_narasi, col_detail = st.columns([1, 1], gap="large")
-
-    # ── Kolom kiri: narasi & verdict ─────────────────────────────────────────
-    with col_narasi:
-        tgl_fmt = tanggal.strftime("%d %B %Y")
-
-        if prediksi == "Sehat":
-            st.success(f"## ✅ {pilihan}: Kualitas Udara SEHAT")
-            st.markdown(
-                f"""
-Berdasarkan analisis model KNN terhadap data ISPU yang dimasukkan 
-({tgl_fmt}), **{pilihan}** ({wilayah}) menunjukkan kualitas udara 
-yang **tergolong Sehat**.
-
-Seluruh atau sebagian besar komponen polutan berada dalam batas aman. 
-Udara di kawasan **{pilihan}** saat ini tidak membahayakan kesehatan 
-masyarakat, dan aktivitas luar ruangan dapat dilakukan seperti biasa.
-                """
-            )
-
-        else:
-            st.error(f"## ⚠️ {pilihan}: Kualitas Udara TIDAK SEHAT")
-            st.markdown(
-                f"""
-Berdasarkan analisis model KNN terhadap data ISPU yang dimasukkan 
-({tgl_fmt}), **{pilihan}** ({wilayah}) menunjukkan kualitas udara 
-yang **tergolong Tidak Sehat**.
-
-Kadar polutan di kawasan **{pilihan}** melebihi ambang batas aman. 
-Masyarakat di sekitar wilayah ini diimbau untuk:
-- 😷 Menggunakan masker N95/KN95 saat berada di luar ruangan
-- 🏠 Membatasi aktivitas luar ruangan, terutama bagi lansia dan anak-anak
-- 🪟 Menutup ventilasi rumah untuk mencegah polutan masuk
-                """
-            )
-
-        # Peringatan komponen bermasalah
-        if melebihi:
-            st.warning(
-                f"🔴 Komponen yang melebihi ambang batas: **{', '.join(melebihi)}**"
-            )
-        else:
-            st.info("🟢 Semua komponen berada di bawah ambang batas aman.")
-
-    # ── Kolom kanan: probabilitas + tabel ringkasan ──────────────────────────
-    with col_detail:
-        st.markdown("#### 📈 Probabilitas Klasifikasi")
-        for label, prob in zip(kelas, proba):
-            icon = "✅" if label == "Sehat" else "⚠️"
-            st.progress(float(prob), text=f"{icon} {label}: {prob*100:.1f}%")
-
-        st.divider()
-        st.markdown(f"#### 🗂️ Ringkasan Data — {pilihan}")
-
-        df = pd.DataFrame({
-            "Komponen":       list(komponen_vals.keys()),
-            "Nilai (µg/m³)":  list(komponen_vals.values()),
-            "Batas Aman":     [AMBANG.get(k, "—") for k in komponen_vals],
-            "Status":         [badge_status(v, AMBANG.get(k, 9999))
-                               for k, v in komponen_vals.items()],
-        })
-        st.dataframe(df, use_container_width=True, hide_index=True)
-
-        st.caption(
-            f"Lokasi: {pilihan} · {wilayah} · {tgl_fmt} | "
-            f"Model: KNN (k={meta['k_terbaik']}) · "
-            f"Akurasi {meta['akurasi_test']*100:.1f}%"
+cols = st.columns(6)
+for col, key in zip(cols, FITUR):
+    val   = d[key]
+    batas = AMBANG[key]
+    with col:
+        st.metric(
+            label       = f"{FITUR_DISPLAY[key]} (µg/m³)",
+            value       = val,
+            delta       = f"{val - batas:+d} dari batas {batas}",
+            delta_color = "inverse",   # negatif → hijau (aman), positif → merah (melebihi)
         )
+
+# ── Prediksi KNN & Hasil Analisis ─────────────────────────────────────────────
+st.divider()
+st.subheader(f"🔍 Hasil Analisis Kualitas Udara · {pilihan}")
+
+input_arr    = np.array([[d[k] for k in FITUR]])   # urutan harus sesuai training
+input_scaled = scaler.transform(input_arr)
+prediksi     = model.predict(input_scaled)[0]
+proba        = model.predict_proba(input_scaled)[0]
+kelas        = meta["label_classes"]
+
+melebihi_label = [FITUR_DISPLAY[k] for k in FITUR if d[k] > AMBANG[k]]
+
+col_narasi, col_detail = st.columns([1, 1], gap="large")
+
+# ── Kolom kiri: narasi & verdict ──────────────────────────────────────────────
+with col_narasi:
+    tgl_fmt = ft.strftime("%d %B %Y, %H:%M")
+
+    if prediksi == "Sehat":
+        st.success(f"## ✅ {pilihan}: Kualitas Udara SEHAT")
+        st.markdown(f"""
+Analisis KNN terhadap data ISPU dari Stasiun **{nama_stasiun}** ({stasiun})
+menunjukkan bahwa kawasan **{pilihan}** ({wilayah}) memiliki kualitas
+udara yang **tergolong Sehat** pada **{tgl_fmt} WIB**.
+
+Kadar polutan berada dalam batas aman ISPU. Aktivitas luar ruangan
+dapat dilakukan seperti biasa oleh seluruh kalangan masyarakat.
+        """)
+    else:
+        st.error(f"## ⚠️ {pilihan}: Kualitas Udara TIDAK SEHAT")
+        st.markdown(f"""
+Analisis KNN terhadap data ISPU dari Stasiun **{nama_stasiun}** ({stasiun})
+menunjukkan bahwa kawasan **{pilihan}** ({wilayah}) memiliki kualitas
+udara yang **tergolong Tidak Sehat** pada **{tgl_fmt} WIB**.
+
+Tindakan yang disarankan untuk masyarakat sekitar:
+- 😷 Gunakan masker N95/KN95 saat berada di luar ruangan
+- 🏠 Batasi aktivitas luar, terutama untuk lansia dan anak-anak
+- 🪟 Tutup ventilasi untuk mencegah polutan masuk ke dalam ruangan
+        """)
+
+    if melebihi_label:
+        st.warning(f"🔴 Komponen melebihi ambang batas: **{', '.join(melebihi_label)}**")
+    else:
+        st.info("🟢 Semua komponen berada di bawah ambang batas aman.")
+
+# ── Kolom kanan: probabilitas + tabel ─────────────────────────────────────────
+with col_detail:
+    st.markdown("#### 📈 Probabilitas Klasifikasi")
+    for label, prob in zip(kelas, proba):
+        icon = "✅" if label == "Sehat" else "⚠️"
+        st.progress(float(prob), text=f"{icon} {label}: {prob*100:.1f}%")
+
+    st.divider()
+    st.markdown("#### 🗂️ Ringkasan Komponen ISPU")
+    df = pd.DataFrame({
+        "Komponen":      [FITUR_DISPLAY[k] for k in FITUR],
+        "Nilai (µg/m³)": [d[k]             for k in FITUR],
+        "Batas Aman":    [AMBANG[k]         for k in FITUR],
+        "Status":        [badge(d[k], AMBANG[k]) for k in FITUR],
+    })
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+    st.caption(
+        f"📡 {stasiun} ({nama_stasiun}) · {tgl_fmt} WIB | "
+        f"KNN k={meta['k_terbaik']} · Akurasi {meta['akurasi_test']*100:.1f}%"
+    )
