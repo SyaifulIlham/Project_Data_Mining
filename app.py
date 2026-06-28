@@ -5,6 +5,7 @@ import pandas as pd
 import datetime
 import time
 
+WIB = datetime.timezone(datetime.timedelta(hours=7))
 # ── Konfigurasi halaman ───────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Kualitas Udara DKI Jakarta",
@@ -181,7 +182,7 @@ if st.session_state.get("_lokasi") != pilihan:
 # Info bar + tombol Refresh
 col_info, col_btn = st.columns([5, 1])
 with col_info:
-    now_str = datetime.datetime.now().strftime("%d %B %Y, %H:%M")
+    now_str = datetime.datetime.now(WIB).strftime("%d %B %Y, %H:%M")
     st.success(
         f"{ikon} **{pilihan}** · {wilayah} · "
         f"Stasiun: **{nama_stasiun}** ({stasiun}) · 🕐 {now_str} WIB"
@@ -196,7 +197,8 @@ if st.session_state["_data"] is None:
     with st.spinner(f"⏳ Mengambil data ISPU Stasiun {stasiun} – {nama_stasiun}..."):
         time.sleep(0.7)
         st.session_state["_data"]  = generate_ispu(stasiun)
-        st.session_state["_waktu"] = datetime.datetime.now()
+        st.session_state["_waktu"] = datetime.datetime.now(WIB)
+
 
 d  = st.session_state["_data"]   # dict[str → int], key = FITUR
 ft = st.session_state["_waktu"]  # datetime objek waktu fetch
