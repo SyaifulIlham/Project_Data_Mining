@@ -198,11 +198,28 @@ def ambil_dari_aqicn(stasiun: str) -> dict | None:
             return None
 
         iaqi   = data["data"].get("iaqi", {})
+
+        # Debug: tampilkan raw iaqi di sidebar jika semua 0
         result = {}
         for aqicn_key, internal_key in AQICN_MAP.items():
             val = iaqi.get(aqicn_key, {}).get("v")
-            result[internal_key] = int(val) if val is not None else 0
+            result[internal_key] = int(round(float(val))) if val is not None else None
 
+        # Cek apakah semua None (stasiun tidak kirim data)
+        semua_none = all(v is None for v in result.values())
+        if semua_none:
+            # Tampilkan raw response untuk debug
+            st.sidebar.warning("⚠️ Debug: Stasiun tidak mengirim data polutan")
+            st.sidebar.json({
+                "status": data.get("status"),
+                "station": data["data"].get("city", {}).get("name", "?"),
+                "iaqi_keys": list(iaqi.keys()),
+                "aqi": data["data"].get("aqi"),
+            })
+            return None
+
+        # Ganti None dengan 0 hanya untuk yang ada data
+        result = {k: (v if v is not None else 0) for k, v in result.items()}
         return result
     except Exception as e:
         st.warning(f"⚠️ Gagal mengambil data AQICN: {e}")
@@ -331,8 +348,11 @@ if st.session_state["_data"] is None:
 
         if data is None:
             st.error(
-                "❌ Gagal mengambil data dari AQICN. "
-                "Periksa koneksi internet atau validitas API key Anda."
+                f"❌ Stasiun **{nama_stasiun} ({stasiun})** saat ini tidak mengirim data ke AQICN.\n\n"
+                "Kemungkinan penyebab:\n"
+                "- Sensor sedang offline / maintenance\n"
+                "- Data belum tersedia untuk hari ini\n\n"
+                "Cek detail di sidebar. Coba pilih stasiun lain atau refresh beberapa saat lagi."
             )
             st.stop()
 
